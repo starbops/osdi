@@ -137,6 +137,7 @@ void main(void)		/* This really IS void, no error here. */
 	hd_init();
 	floppy_init();
 	sti();
+    panic(""); 
 	move_to_user_mode();
 	if (!fork()) {		/* we count on this going ok */
 		init();
@@ -200,7 +201,6 @@ void init(void)
 			(void) open("/dev/tty0",O_RDWR,0);
 			(void) dup(0);
 			(void) dup(0);
-			printf("Hello %s\n\r","0356033");
 			_exit(execve("/bin/sh",argv,envp));
 		}
 		while (1)
