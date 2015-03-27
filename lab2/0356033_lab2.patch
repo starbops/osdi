@@ -1,0 +1,209 @@
+Index: linux-0.11/tools/build.sh
+===================================================================
+--- linux-0.11/tools/build.sh	(revision 123)
++++ linux-0.11/tools/build.sh	(working copy)
+@@ -7,7 +7,8 @@
+ setup=$2
+ system=$3
+ IMAGE=$4
+-root_dev=$5
++hello=$5
++root_dev=$6
+ 
+ # Set the biggest sys_size
+ # Changes from 0x20000 to 0x30000 by tigercn to avoid oversized code.
+@@ -26,15 +27,19 @@
+ [ ! -f "$bootsect" ] && echo "there is no bootsect binary file there" && exit -1
+ dd if=$bootsect bs=512 count=1 of=$IMAGE 2>&1 >/dev/null
+ 
++# Write hello (512 bytes, one sector) to stdout
++[ ! -f "$hello" ] && echo "there is no hello binary file there" && exit -1
++dd if=$hello seek=1 bs=512 count=1 of=$IMAGE 2>&1 >/dev/null
++
+ # Write setup(4 * 512bytes, four sectors) to stdout
+ [ ! -f "$setup" ] && echo "there is no setup binary file there" && exit -1
+-dd if=$setup seek=1 bs=512 count=4 of=$IMAGE 2>&1 >/dev/null
++dd if=$setup seek=2 bs=512 count=4 of=$IMAGE 2>&1 >/dev/null
+ 
+ # Write system(< SYS_SIZE) to stdout
+ [ ! -f "$system" ] && echo "there is no system binary file there" && exit -1
+ system_size=`wc -c $system |cut -d" " -f1`
+ [ $system_size -gt $SYS_SIZE ] && echo "the system binary is too big" && exit -1
+-dd if=$system seek=5 bs=512 count=$((2888-1-4)) of=$IMAGE 2>&1 >/dev/null
++dd if=$system seek=6 bs=512 count=$((2888-1-4)) of=$IMAGE 2>&1 >/dev/null
+ 
+ # Set "device" for the root image file
+ echo -ne "\x$DEFAULT_MINOR_ROOT\x$DEFAULT_MAJOR_ROOT" | dd ibs=1 obs=1 count=2 seek=508 of=$IMAGE conv=notrunc  2>&1 >/dev/null
+Index: linux-0.11/boot/bootsect.s
+===================================================================
+--- linux-0.11/boot/bootsect.s	(revision 123)
++++ linux-0.11/boot/bootsect.s	(working copy)
+@@ -34,9 +34,11 @@
+ 	.text
+ 
+ 	.equ SETUPLEN, 4		# nr of setup-sectors
++	.equ HELLOLEN, 1		# nr of hello-sector
+ 	.equ BOOTSEG, 0x07c0		# original address of boot-sector
+ 	.equ INITSEG, 0x9000		# we move boot here - out of the way
+ 	.equ SETUPSEG, 0x9020		# setup starts here
++	.equ HELLOSEG, 0x9020		# hello starts here
+ 	.equ SYSSEG, 0x1000		# system loaded at 0x10000 (65536).
+ 	.equ ENDSEG, SYSSEG + SYSSIZE	# where to stop loading
+ 
+@@ -62,12 +64,48 @@
+ 	mov	%ax, %ss
+ 	mov	$0xFF00, %sp		# arbitrary value >>512
+ 
++boot_menu:
++	mov	$0x03, %ah		# read cursor pos
++	xor	%bh, %bh
++	int	$0x10
++	
++	mov	$31, %cx
++	mov	$0x0007, %bx		# page 0, attribute 7 (normal)
++	mov     $menu, %bp
++	mov	$0x1301, %ax		# write string, move cursor
++	int	$0x10
++
++multiboot:
++	mov	$0x00, %ah
++	int	$0x16
++	cmp	$0x31, %al
++	je	load_setup
++	cmp	$0x32, %al
++	je	load_hello
++	jmp	multiboot
++
++load_hello:
++        mov     $0x0000, %dx            # drive 0, head 0
++        mov     $0x0002, %cx            # sector 2, track 0
++        mov     $0x0200, %bx            # address = 512, in INITSEG
++        .equ    AX, 0x0200+HELLOLEN
++        mov     $AX, %ax                # service 2, nr of sectors
++        int     $0x13                   # read it
++        jnc     ok_load_hello           # ok - continue
++        mov     $0x0000, %dx
++        mov     $0x0000, %ax            # reset the diskette
++        int     $0x13
++        jmp     load_hello
++
++ok_load_hello:
++	ljmp	$HELLOSEG, $0
++
+ # load the setup-sectors directly after the bootblock.
+ # Note that 'es' is already set up.
+ 
+ load_setup:
+ 	mov	$0x0000, %dx		# drive 0, head 0
+-	mov	$0x0002, %cx		# sector 2, track 0
++	mov	$0x0003, %cx		# sector 3, track 0
+ 	mov	$0x0200, %bx		# address = 512, in INITSEG
+ 	.equ    AX, 0x0200+SETUPLEN
+ 	mov     $AX, %ax		# service 2, nr of sectors
+@@ -147,7 +185,7 @@
+ #
+ # in:	es - starting address segment (normally 0x1000)
+ #
+-sread:	.word 1+ SETUPLEN	# sectors read of current track
++sread:	.word 2+ SETUPLEN	# sectors read of current track
+ head:	.word 0			# current head
+ track:	.word 0			# current track
+ 
+@@ -244,6 +282,13 @@
+ sectors:
+ 	.word 0
+ 
++menu:
++	.byte 13,10
++	.ascii "[1] linux-0.11"
++	.byte 13,10
++	.ascii "[2] hello"
++	.byte 13,10,13,10
++
+ msg1:
+ 	.byte 13,10
+ 	.ascii "Loading system ..."
+Index: linux-0.11/boot/hello.s
+===================================================================
+--- linux-0.11/boot/hello.s	(revision 0)
++++ linux-0.11/boot/hello.s	(revision 0)
+@@ -0,0 +1,26 @@
++	.code16
++	.global _start
++	.text
++_start:
++	mov	%cs, %ax
++	mov	%ax, %ds
++	mov	%ax, %es
++
++	mov	$0x03, %ah		# read cursor pos
++	xor	%bh, %bh
++	int	$0x10
++	
++	mov	$20, %cx
++	mov	$0x0007, %bx		# page 0, attribute 7 (normal)
++	#lea	msg1, %bp
++	mov     $msg1, %bp
++	mov	$0x1301, %ax		# write string, move cursor
++	int	$0x10
++end_hello:
++	jmp end_hello
++
++msg1:
++	.byte 13,10
++	.ascii "Hello OSDI Lab2!"
++	.byte 13,10
++	
+Index: linux-0.11/boot/Makefile
+===================================================================
+--- linux-0.11/boot/Makefile	(revision 123)
++++ linux-0.11/boot/Makefile	(working copy)
+@@ -2,7 +2,7 @@
+ 
+ LDFLAGS	+= -Ttext 0
+ 
+-all: bootsect setup
++all: bootsect setup hello
+ 
+ bootsect: bootsect.s
+ 	@$(AS) -o bootsect.o bootsect.s
+@@ -15,8 +15,13 @@
+ 	@$(LD) $(LDFLAGS) -o setup setup.o
+ 	@objcopy -R .pdr -R .comment -R.note -S -O binary setup
+ 
++hello: hello.s
++	@$(AS) -o hello.o hello.s
++	@$(LD) $(LDFLAGS) -o hello hello.o
++	@objcopy -R .pdr -R .comment -R.note -S -O binary hello
++
+ head.o: head.s
+ 	@$(AS) -o head.o head.s
+ 
+ clean:
+-	@rm -f bootsect bootsect.o setup setup.o head.o
++	@rm -f bootsect bootsect.o setup setup.o head.o hello hello.o
+Index: linux-0.11/Makefile
+===================================================================
+--- linux-0.11/Makefile	(revision 123)
++++ linux-0.11/Makefile	(working copy)
+@@ -42,15 +42,18 @@
+ 
+ all:	Image	
+ 
+-Image: boot/bootsect boot/setup tools/system
++Image: boot/bootsect boot/setup tools/system boot/hello
+ 	@cp -f tools/system system.tmp
+ 	@strip system.tmp
+ 	@objcopy -O binary -R .note -R .comment system.tmp tools/kernel
+-	@sh tools/build.sh boot/bootsect boot/setup tools/kernel Image $(ROOT_DEV)
++	@sh tools/build.sh boot/bootsect boot/setup tools/kernel Image boot/hello $(ROOT_DEV)
+ 	@rm system.tmp
+ 	@rm tools/kernel -f
+ 	@sync
+ 
++boot/hello: boot/hello.s
++	@make hello -C boot/
++
+ disk: Image
+ 	@dd bs=8192 if=Image of=/dev/fd0
+ 
