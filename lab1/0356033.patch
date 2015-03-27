@@ -1,0 +1,61 @@
+Index: linux-0.11/include/linux/sched.h
+===================================================================
+--- linux-0.11/include/linux/sched.h	(revision 10)
++++ linux-0.11/include/linux/sched.h	(working copy)
+@@ -1,7 +1,7 @@
+ #ifndef _SCHED_H
+ #define _SCHED_H
+ 
+-#define NR_TASKS 0
++#define NR_TASKS 64
+ #define HZ 100
+ 
+ #define FIRST_TASK task[0]
+Index: linux-0.11/init/main.c
+===================================================================
+--- linux-0.11/init/main.c	(revision 10)
++++ linux-0.11/init/main.c	(working copy)
+@@ -137,7 +137,6 @@
+ 	hd_init();
+ 	floppy_init();
+ 	sti();
+-	panic(""); 
+ 	move_to_user_mode();
+ 	if (!fork()) {		/* we count on this going ok */
+ 		init();
+@@ -201,6 +200,7 @@
+ 			(void) open("/dev/tty0",O_RDWR,0);
+ 			(void) dup(0);
+ 			(void) dup(0);
++			printf("Hello %s\n\r","0356033");
+ 			_exit(execve("/bin/sh",argv,envp));
+ 		}
+ 		while (1)
+Index: linux-0.11/Makefile
+===================================================================
+--- linux-0.11/Makefile	(revision 10)
++++ linux-0.11/Makefile	(working copy)
+@@ -34,11 +34,11 @@
+ LIBS	=lib/lib.a
+ 
+ .c.s:
+-@$(CC) $(CFLAGS) -S -o $*.s $<
++	@$(CC) $(CFLAGS) -S -o $*.s $<
+ .s.o:
+-@$(AS)  -o $*.o $<
++	@$(AS)  -o $*.o $<
+ .c.o:
+-@$(CC) $(CFLAGS) -c -o $*.o $<
++	@$(CC) $(CFLAGS) -c -o $*.o $<
+ 
+ all:	Image	
+ 
+@@ -46,7 +46,7 @@
+ 	@cp -f tools/system system.tmp
+ 	@strip system.tmp
+ 	@objcopy -O binary -R .note -R .comment system.tmp tools/kernel
+-	@tools/build.sh boot/bootsect boot/setup tools/kernel Image $(ROOT_DEV)
++	@sh tools/build.sh boot/bootsect boot/setup tools/kernel Image $(ROOT_DEV)
+ 	@rm system.tmp
+ 	@rm tools/kernel -f
+ 	@sync
