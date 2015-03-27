@@ -1,0 +1,364 @@
+Index: nctu_os/kernel/trap.c
+===================================================================
+--- nctu_os/kernel/trap.c	(revision 207)
++++ nctu_os/kernel/trap.c	(working copy)
+@@ -108,6 +108,16 @@
+ 	}
+ 
+ 	/* Lab3: Check the trap number and call the interrupt handler. */
++	switch (tf->tf_trapno) {
++		case IRQ_OFFSET + IRQ_TIMER:
++			timer_handler();
++			return;
++		case IRQ_OFFSET + IRQ_KBD:
++			kbd_intr();
++			return;
++		default:
++			break;
++	}
+ 
+ 	// Unexpected trap: The user process or the kernel has a bug.
+ 	print_trapframe(tf);
+@@ -124,17 +134,115 @@
+ }
+ void trap_init()
+ {
+-	int i;
++	/*int i;*/
+ 	/* Initial interrupt descrip table for all traps */
++	/*extern void Divide_ISR();
++	extern void Debug_ISR();
++	extern void Nmi_ISR();
++	extern void Brkpt_ISR();
++	extern void Oflow_ISR();
++	extern void Bound_ISR();
++	extern void Illop_ISR();
++	extern void Device_ISR();
++	extern void Dblflt_ISR();
++	extern void Tss_ISR();
++	extern void Segnp_ISR();
++	extern void Stack_ISR();
++	extern void Gpflt_ISR();
++	extern void Pgflt_ISR();
++	extern void Fperr_ISR();
++	extern void Align_ISR();
++	extern void Mchk_ISR();
++	extern void Simderr_ISR();*/
++	extern void Timer_ISR();
++	extern void Keyboard_ISR();
++	/*extern void _22_ISR();
++	extern void _23_ISR();
++	extern void _24_ISR();
++	extern void _25_ISR();
++	extern void _26_ISR();
++	extern void _27_ISR();
++	extern void _28_ISR();
++	extern void _29_ISR();
++	extern void _30_ISR();
++	extern void _31_ISR();
++	extern void _32_ISR();
++	extern void _33_ISR();
++	extern void _34_ISR();
++	extern void _35_ISR();
++	extern void _36_ISR();
++	extern void _37_ISR();
++	extern void _38_ISR();
++	extern void _39_ISR();
++	extern void _40_ISR();
++	extern void _41_ISR();
++	extern void _42_ISR();
++	extern void _43_ISR();
++	extern void _44_ISR();
++	extern void _45_ISR();
++	extern void _46_ISR();
++	extern void _47_ISR();*/
++	/*extern void Syscall_ISR();*/
+ 	extern void Default_ISR();
++
++	/*
+ 	for (i = 0; i < 256; i++)
+ 	{
+ 		SETGATE(idt[i], 1, GD_KT, Default_ISR, 0);
+ 	}
++	*/
+ 
++	/*SETGATE(idt[T_DIVIDE], 0, GD_KT, Divide_ISR, 0);
++	SETGATE(idt[T_DEBUG], 0, GD_KT, Debug_ISR, 0);
++	SETGATE(idt[T_NMI], 0, GD_KT, Nmi_ISR, 0);
++	SETGATE(idt[T_BRKPT], 0, GD_KT, Brkpt_ISR, 3);
++	SETGATE(idt[T_OFLOW], 0, GD_KT, Oflow_ISR, 0);
++	SETGATE(idt[T_BOUND], 0, GD_KT, Bound_ISR, 0);
++	SETGATE(idt[T_ILLOP], 0, GD_KT, Illop_ISR, 0);
++	SETGATE(idt[T_DEVICE], 0, GD_KT, Device_ISR, 0);
++	SETGATE(idt[T_DBLFLT], 0, GD_KT, Dblflt_ISR, 0);
++	SETGATE(idt[T_TSS], 0, GD_KT, Tss_ISR, 0);
++	SETGATE(idt[T_SEGNP], 0, GD_KT, Segnp_ISR, 0);
++	SETGATE(idt[T_STACK], 0, GD_KT, Stack_ISR, 0);
++	SETGATE(idt[T_GPFLT], 0, GD_KT, Gpflt_ISR, 0);
++	SETGATE(idt[T_PGFLT], 0, GD_KT, Pgflt_ISR, 0);
++	SETGATE(idt[T_FPERR], 0, GD_KT, Fperr_ISR, 0);
++	SETGATE(idt[T_ALIGN], 0, GD_KT, Align_ISR, 0);
++	SETGATE(idt[T_MCHK], 0, GD_KT, Mchk_ISR, 0);
++	SETGATE(idt[T_SIMDERR], 0, GD_KT, Simderr_ISR, 0);*/
++	SETGATE(idt[IRQ_OFFSET], 0, GD_KT, Timer_ISR, 0);
++	SETGATE(idt[IRQ_OFFSET+1], 0, GD_KT, Keyboard_ISR, 0);
++	/*SETGATE(idt[22], 0, GD_KT, _22_ISR, 0);
++	SETGATE(idt[23], 0, GD_KT, _23_ISR, 0);
++	SETGATE(idt[24], 0, GD_KT, _24_ISR, 0);
++	SETGATE(idt[25], 0, GD_KT, _25_ISR, 0);
++	SETGATE(idt[26], 0, GD_KT, _26_ISR, 0);
++	SETGATE(idt[27], 0, GD_KT, _27_ISR, 0);
++	SETGATE(idt[28], 0, GD_KT, _28_ISR, 0);
++	SETGATE(idt[29], 0, GD_KT, _29_ISR, 0);
++	SETGATE(idt[30], 0, GD_KT, _30_ISR, 0);
++	SETGATE(idt[31], 0, GD_KT, _31_ISR, 0);*/
++	/*SETGATE(idt[32], 0, GD_KT, _32_ISR, 0);
++	SETGATE(idt[33], 0, GD_KT, _33_ISR, 0);*/
++	/*SETGATE(idt[34], 0, GD_KT, _34_ISR, 0);
++	SETGATE(idt[35], 0, GD_KT, _35_ISR, 0);
++	SETGATE(idt[36], 0, GD_KT, _36_ISR, 0);
++	SETGATE(idt[37], 0, GD_KT, _37_ISR, 0);
++	SETGATE(idt[38], 0, GD_KT, _38_ISR, 0);
++	SETGATE(idt[39], 0, GD_KT, _39_ISR, 0);
++	SETGATE(idt[40], 0, GD_KT, _40_ISR, 0);
++	SETGATE(idt[41], 0, GD_KT, _41_ISR, 0);
++	SETGATE(idt[42], 0, GD_KT, _42_ISR, 0);
++	SETGATE(idt[43], 0, GD_KT, _43_ISR, 0);
++	SETGATE(idt[44], 0, GD_KT, _44_ISR, 0);
++	SETGATE(idt[45], 0, GD_KT, _45_ISR, 0);
++	SETGATE(idt[46], 0, GD_KT, _46_ISR, 0);
++	SETGATE(idt[47], 0, GD_KT, _47_ISR, 0);*/
++	/*SETGATE(idt[T_SYSCALL], 0, GD_KT, Syscall_ISR, 3);*/
++	SETGATE(idt[T_DEFAULT], 0, GD_KT, Default_ISR, 0);
++
+ 	/* Lab3: Keyboard interrupt setup */
+ 
+-
+ 	/* Lab3: Timer Trap setup*/
+ 
+ 
+Index: nctu_os/kernel/shell.c
+===================================================================
+--- nctu_os/kernel/shell.c	(revision 207)
++++ nctu_os/kernel/shell.c	(working copy)
+@@ -13,7 +13,8 @@
+ static struct Command commands[] = {
+ 	{ "help", "Display this list of commands", mon_help },
+ 	{ "kerninfo", "Display information about the kernel", mon_kerninfo },
+-	{ "print_tick", "Display system tick", print_tick }
++	{ "print_tick", "Display system tick", print_tick },
++	{ "chgcolor", "Change display color", chgcolor }
+ };
+ #define NCOMMANDS (sizeof(commands)/sizeof(commands[0]))
+ 
+@@ -30,12 +31,27 @@
+ int mon_kerninfo(int argc, char **argv)
+ {
+ 	/* Lab3: print the kernel code and data section size */
++	extern char _start[], etext[], edata[], end[];
++	cprintf("Kernel code base start=0x%08x size = %d\n", _start, etext-_start);
++	cprintf("Kernel data base start=0x%08x size = %d\n", edata, end-edata);
++	cprintf("Kernel executable memory footprint: %dKB\n", (end-_start)/1000);
+ 	return 0;
+ }
+ int print_tick(int argc, char **argv)
+ {
+ 	cprintf("Now tick = %d\n", get_tick());
+ }
++int chgcolor(int argc, char **argv)
++{
++	if (argc == 1) {
++		cprintf("No input text color!\n");
++	}
++	else if (argc > 1) {
++		settextcolor(*argv[1], 0);
++		cprintf("Change color %d!\n", *argv[1]-48);
++	}
++	return 0;
++}
+ 
+ #define WHITESPACE "\t\r\n "
+ #define MAXARGS 16
+Index: nctu_os/kernel/trap_entry.S
+===================================================================
+--- nctu_os/kernel/trap_entry.S	(revision 207)
++++ nctu_os/kernel/trap_entry.S	(working copy)
+@@ -18,6 +18,56 @@
+ .text
+ 
+ /* ISRs */
++/*TRAPHANDLER_NOEC(Divide_ISR, T_DIVIDE)
++TRAPHANDLER_NOEC(Debug_ISR, T_DEBUG)
++TRAPHANDLER_NOEC(Nmi_ISR, T_NMI)
++TRAPHANDLER_NOEC(Brkpt_ISR, T_BRKPT)
++TRAPHANDLER_NOEC(Oflow_ISR, T_OFLOW)
++TRAPHANDLER_NOEC(Bound_ISR, T_BOUND)
++TRAPHANDLER_NOEC(Illop_ISR, T_ILLOP)
++TRAPHANDLER_NOEC(Device_ISR, T_DEVICE)
++TRAPHANDLER_NOEC(Dblflt_ISR, T_DBLFLT)
++TRAPHANDLER_NOEC(Tss_ISR, T_TSS)
++TRAPHANDLER_NOEC(Segnp_ISR, T_SEGNP)
++TRAPHANDLER_NOEC(Stack_ISR, T_STACK)
++TRAPHANDLER_NOEC(Gpflt_ISR, T_GPFLT)
++TRAPHANDLER_NOEC(Pgflt_ISR, T_PGFLT)
++TRAPHANDLER_NOEC(Fperr_ISR, T_FPERR)
++TRAPHANDLER_NOEC(Align_ISR, T_ALIGN)
++TRAPHANDLER_NOEC(Mchk_ISR, T_MCHK)
++TRAPHANDLER_NOEC(Simderr_ISR, T_SIMDERR)*/
++
++TRAPHANDLER_NOEC(Timer_ISR, IRQ_OFFSET)
++TRAPHANDLER_NOEC(Keyboard_ISR, IRQ_OFFSET+1)
++
++/*TRAPHANDLER_NOEC(_22_ISR, 22)
++TRAPHANDLER_NOEC(_23_ISR, 23)
++TRAPHANDLER_NOEC(_24_ISR, 24)
++TRAPHANDLER_NOEC(_25_ISR, 25)
++TRAPHANDLER_NOEC(_26_ISR, 26)
++TRAPHANDLER_NOEC(_27_ISR, 27)
++TRAPHANDLER_NOEC(_28_ISR, 28)
++TRAPHANDLER_NOEC(_29_ISR, 29)
++TRAPHANDLER_NOEC(_30_ISR, 30)
++TRAPHANDLER_NOEC(_31_ISR, 31)*/
++/*TRAPHANDLER_NOEC(_32_ISR, 32)
++TRAPHANDLER_NOEC(_33_ISR, 33)*/
++/*TRAPHANDLER_NOEC(_34_ISR, 34)
++TRAPHANDLER_NOEC(_35_ISR, 35)
++TRAPHANDLER_NOEC(_36_ISR, 36)
++TRAPHANDLER_NOEC(_37_ISR, 37)
++TRAPHANDLER_NOEC(_38_ISR, 38)
++TRAPHANDLER_NOEC(_39_ISR, 39)
++TRAPHANDLER_NOEC(_40_ISR, 40)
++TRAPHANDLER_NOEC(_41_ISR, 41)
++TRAPHANDLER_NOEC(_42_ISR, 42)
++TRAPHANDLER_NOEC(_43_ISR, 43)
++TRAPHANDLER_NOEC(_44_ISR, 44)
++TRAPHANDLER_NOEC(_45_ISR, 45)
++TRAPHANDLER_NOEC(_46_ISR, 46)
++TRAPHANDLER_NOEC(_47_ISR, 47)*/
++
++/*TRAPHANDLER_NOEC(Syscall_ISR, T_SYSCALL)*/
+ TRAPHANDLER_NOEC(Default_ISR, T_DEFAULT)
+ /* Hint: Use TRAPHANDLER_NOEC macro define other isr enrty */
+ 
+@@ -28,6 +78,34 @@
+ 	 * After stack parpared, just "call default_trap_handler".
+ 	 */
+ 
++	# Build trap frame
++	pushl %ds
++	pushl %es
++	pushal
++
++	# Set up data segments
++	movw $GD_KD, %ax
++	movw %ax, %ds
++	movw %ax, %es
++
++	# disable FL_IF in %eflags, i.e. disable interrupts
++	pushfl
++	popl %eax
++	movl $FL_IF, %ebx
++	notl %ebx
++	andl %ebx, %eax
++	pushl %eax
++	popfl
++
++	# Call default_trap_handler(tf), where tf=%esp
++	pushl %esp
++	call default_trap_handler
++	popl %esp
++
++	# Cleanup pushes and ret
++	popal
++	popl %es
++	popl %ds
+ 	add $8, %esp # Cleans up the pushed error code and pushed ISR number
+ 	iret # pops 5 things at once: CS, EIP, EFLAGS, SS, and ESP!
+ 
+Index: nctu_os/kernel/kern.ld
+===================================================================
+--- nctu_os/kernel/kern.ld	(revision 207)
++++ nctu_os/kernel/kern.ld	(working copy)
+@@ -42,6 +42,7 @@
+ 	. = ALIGN(0x1000);
+ 
+ 	/* The data segment */
++	PROVIDE(edata = .);
+ 	.data : {
+ 		*(.data)
+ 	}
+Index: nctu_os/kernel/screen.c
+===================================================================
+--- nctu_os/kernel/screen.c	(revision 207)
++++ nctu_os/kernel/screen.c	(working copy)
+@@ -28,7 +28,7 @@
+ 
+         /* Finally, we set the chunk of memory that occupies
+         *  the last line of text to our 'blank' character */
+-        memset (textmemptr + (25 - temp) * 80, blank, 80);
++        memset (textmemptr + (25 - temp) * 80, blank, 80 * 2);
+         csr_y = 25 - 1;
+     }
+ }
+@@ -88,7 +88,12 @@
+     /* Handle a backspace, by moving the cursor back one space */
+     if(c == 0x08)
+     {
+-        if(csr_x != 0) csr_x--;
++        /*if(csr_x != 0) csr_x--;*/
++        if(csr_x != 0) {
++		csr_x--;
++		where = textmemptr + (csr_y * 80 + csr_x);
++		*where = ' ' | att;
++	}
+     }
+     /* Handles a tab by incrementing the cursor's x, but only
+     *  to a point that will make it divisible by 8 */
+Index: nctu_os/inc/kbd.h
+===================================================================
+--- nctu_os/inc/kbd.h	(revision 207)
++++ nctu_os/inc/kbd.h	(working copy)
+@@ -81,5 +81,6 @@
+ #define	KBR_ECHO	0xEE	/* echo response */
+ 
+ void kbd_init(void);
++void kbd_intr(void);
+ 
+ #endif 
+Index: nctu_os/inc/timer.h
+===================================================================
+--- nctu_os/inc/timer.h	(revision 207)
++++ nctu_os/inc/timer.h	(working copy)
+@@ -1,5 +1,6 @@
+ #ifndef TIMER_H
+ #define TIMER_H
+ void timer_init();
++void timer_handler();
+ unsigned long get_tick();
+ #endif
+Index: nctu_os/inc/trap.h
+===================================================================
+--- nctu_os/inc/trap.h	(revision 207)
++++ nctu_os/inc/trap.h	(working copy)
+@@ -24,6 +24,10 @@
+ #define T_MCHK      18		// machine check
+ #define T_SIMDERR   19		// SIMD floating point error
+ 
++// For Lab3
++/*#define T_KEYBOARD  20
++#define T_TIMER     21*/
++
+ // These are arbitrarily chosen, but with care not to overlap
+ // processor defined exceptions or interrupt vectors.
+ #define T_SYSCALL   48		// system call
+Index: nctu_os/inc/shell.h
+===================================================================
+--- nctu_os/inc/shell.h	(revision 207)
++++ nctu_os/inc/shell.h	(working copy)
+@@ -5,5 +5,6 @@
+ int mon_help(int argc, char **argv);
+ int mon_kerninfo(int argc, char **argv);
+ int print_tick(int argc, char **argv);
++int chgcolor(int argc, char **argv);
+ 
+ #endif
