@@ -1,0 +1,308 @@
+Index: nctu_os/kernel/kbd.c
+===================================================================
+--- nctu_os/kernel/kbd.c	(revision 296)
++++ nctu_os/kernel/kbd.c	(working copy)
+@@ -224,6 +224,8 @@
+ 
+ 	irq_setmask_8259A(irq_mask_8259A & ~(1<<1));
+ 	/* Lab3 TODO: Register trap handler */
++	extern void Keyboard_ISR();
++	register_handler(IRQ_OFFSET+IRQ_KBD, kbd_intr, Keyboard_ISR, 0, 0);
+ }
+ 
+ /* high-level console I/O */
+Index: nctu_os/kernel/task.c
+===================================================================
+--- nctu_os/kernel/task.c	(revision 296)
++++ nctu_os/kernel/task.c	(working copy)
+@@ -82,11 +82,10 @@
+ 	ts->tf.tf_esp = ts->usr_stack + USR_STACK_SIZE;
+ 	
+ 	/* Lab4 TODO: Setup task structure (task_id and parent_id) */
+-	/*ts->task_id = ?;
+-	ts->state = ?;
+-	ts->parent_id = ?;
+-	ts->remind_ticks = ?;
+-	*/
++	ts->task_id = i;
++	ts->state = TASK_RUNNABLE;
++	ts->parent_id = (cur_task == NULL)? 0: cur_task->task_id;
++	ts->remind_ticks = TIME_QUANT;
+ 
+ 	return i;
+ }
+@@ -94,12 +93,15 @@
+ void sys_kill(int pid)
+ {
+ 	/*Lab4 TODO: Died task recycle, just set task state as TASK_STOP and sched_yield() */
++	tasks[pid].state = TASK_STOP;
++	sched_yield();
+ 
+ }
+ 
+ int sys_fork()
+ {
+ 	int pid = -1;
++	int offset = 0;
+ 
+ 	/* Initial task space */
+ 	pid = task_create();
+@@ -110,10 +112,16 @@
+ 	if ((uint32_t)cur_task != NULL)
+ 	{
+ 		/* Lab4 TODO: Copy parent's tf to new task's tf */
+-	
++		tasks[pid].tf = cur_task->tf;
++
+ 		/* Lab4 TODO: Copy parent's usr_stack to new task's usr_stack and reset the new task's esp pointer. */
++		memcpy(tasks[pid].usr_stack, cur_task->usr_stack, USR_STACK_SIZE);
++		offset = (char *)cur_task->tf.tf_esp - cur_task->usr_stack;
++		tasks[pid].tf.tf_esp = tasks[pid].usr_stack + offset;
+ 
+ 		/* Lab4 TODO: Set system call's return value, parent return 0 and child return pid. */
++		tasks[pid].tf.tf_regs.reg_eax = pid;
++		return 0;
+ 	}
+ 
+ 	return 0;
+Index: nctu_os/kernel/trap_entry.S
+===================================================================
+--- nctu_os/kernel/trap_entry.S	(revision 296)
++++ nctu_os/kernel/trap_entry.S	(working copy)
+@@ -39,8 +39,11 @@
+ TRAPHANDLER_NOEC(Default_ISR, T_DEFAULT)
+ 
+ /* Lab3 TODO: Setup timer and keyboard's ISR entry point */
++TRAPHANDLER_NOEC(Timer_ISR, IRQ_OFFSET)
++TRAPHANDLER_NOEC(Keyboard_ISR, IRQ_OFFSET+1)
+ 
+ /* Lab4 TODO: Setup system call's ISR entry point */
++TRAPHANDLER_NOEC(Syscall_ISR, T_SYSCALL)
+ 
+ 
+ .globl default_trap_handler;
+@@ -49,6 +52,34 @@
+ 	 * You can reference the http://www.osdever.net/bkerndev/Docs/isrs.htm
+ 	 * After stack parpared, just "call default_trap_handler".
+ 	 */
++	# Build trap frame
++	pushl %ds
++	pushl %es
++	pushal
+ 
++	# Set up data segments
++	movw $GD_KD, %ax
++	movw %ax, %ds
++	movw %ax, %es
++
++	# disable FL_IF in %eflags, i.e. disable interrupts
++	pushfl
++	popl %eax
++	movl $FL_IF, %ebx
++	notl %ebx
++	andl %ebx, %eax
++	pushl %eax
++	popfl
++
++	# Call default_trap_handler(tf), where tf=%esp
++	pushl %esp
++	call default_trap_handler
++	popl %esp
++
++	# Cleanup pushes and ret
++	popal
++	popl %es
++	popl %ds
++	add $8, %esp # Cleans up the pushed error code and pushed ISR number
+ 	iret # pops 5 things at once: CS, EIP, EFLAGS, SS, and ESP!
+ 
+Index: nctu_os/kernel/shell.c
+===================================================================
+--- nctu_os/kernel/shell.c	(revision 296)
++++ nctu_os/kernel/shell.c	(working copy)
+@@ -15,7 +15,8 @@
+ static struct Command commands[] = {
+ 	{ "help", "Display this list of commands", mon_help },
+ 	{ "kerninfo", "Display information about the kernel", mon_kerninfo },
+-	{ "print_tick", "Display system tick", print_tick }
++	{ "print_tick", "Display system tick", print_tick },
++	{ "chgcolor", "Change display color", chgcolor }
+ };
+ #define NCOMMANDS (sizeof(commands)/sizeof(commands[0]))
+ 
+@@ -32,7 +33,10 @@
+ int mon_kerninfo(int argc, char **argv)
+ {
+ 	/* Lab3: print the kernel code and data section size */
+-
++	extern char _start[], etext[], edata[], end[];
++	cprintf("Kernel code base start=0x%08x size = %d\n", _start, etext-_start);
++	cprintf("Kernel data base start=0x%08x size = %d\n", edata, end-edata);
++	cprintf("Kernel executable memory footprint: %dKB\n", (end-_start)/1000);
+ 	return 0;
+ }
+ int print_tick(int argc, char **argv)
+@@ -42,6 +46,17 @@
+ }
+ 
+ /* Lab3 TODO: Add a command chgcolor */
++int chgcolor(int argc, char **argv)
++{
++   if (argc == 1) {
++       cprintf("No input text color!\n");
++   }
++   else if (argc > 1) {
++       settextcolor(*argv[1], 0);
++       cprintf("Change color %d!\n", *argv[1]-48);
++   }
++   return 0;
++}
+ 
+ #define WHITESPACE "\t\r\n "
+ #define MAXARGS 16
+Index: nctu_os/kernel/syscall.c
+===================================================================
+--- nctu_os/kernel/syscall.c	(revision 296)
++++ nctu_os/kernel/syscall.c	(working copy)
+@@ -42,7 +42,9 @@
+ 
+ 	case SYS_sleep:
+ 		/* Lab4 TODO: set task to sleep state and yield this task. */
+-
++		cur_task->state = TASK_SLEEP;
++		cur_task->remind_ticks = a1;
++		sched_yield();
+ 		break;
+ 	case SYS_kill:
+ 		/* Lab4 TODO: kill task. */
+@@ -57,6 +59,12 @@
+ {
+ 	int32_t ret = -1;
+ 	/* Lab4 TODO: call do_syscall and pass the parmeters from tf */
++	ret = do_syscall(tf->tf_regs.reg_eax,
++					tf->tf_regs.reg_edx,
++					tf->tf_regs.reg_ecx,
++					tf->tf_regs.reg_ebx,
++					tf->tf_regs.reg_edi,
++					tf->tf_regs.reg_esi);
+ 
+ 	/* Set system return value */
+ 	tf->tf_regs.reg_eax = ret;
+@@ -135,6 +143,8 @@
+ {
+ 	/* Initial syscall trap after trap_init()*/
+ 	/* Lab4 TODO: Register system call's trap handler (syscall_handler)*/
++	extern void Syscall_ISR();
++	register_handler(T_SYSCALL, syscall_handler, Syscall_ISR, 0, 3);
+ 
+ }
+ 
+Index: nctu_os/kernel/kern.ld
+===================================================================
+--- nctu_os/kernel/kern.ld	(revision 296)
++++ nctu_os/kernel/kern.ld	(working copy)
+@@ -42,6 +42,7 @@
+ 	. = ALIGN(0x1000);
+ 
+ 	/* The data segment */
++	PROVIDE(edata = .);
+ 	.data : {
+ 		*(.data)
+ 	}
+Index: nctu_os/kernel/screen.c
+===================================================================
+--- nctu_os/kernel/screen.c	(revision 296)
++++ nctu_os/kernel/screen.c	(working copy)
+@@ -29,6 +29,7 @@
+         /* Finally, we set the chunk of memory that occupies
+         *  the last line of text to our 'blank' character */
+         memset (textmemptr + (25 - temp) * 80, blank, 80);
++		memset (textmemptr + (25 - temp) * 80, blank, 80 * 2);
+         csr_y = 25 - 1;
+     }
+ }
+Index: nctu_os/kernel/timer.c
+===================================================================
+--- nctu_os/kernel/timer.c	(revision 296)
++++ nctu_os/kernel/timer.c	(working copy)
+@@ -31,8 +31,30 @@
+ 	if (cur_task != NULL)
+ 	{
+ 		/* Lab4 TODO: Check if tasks need wakeup.  */
++		for (i = 0; i < NR_TASKS; i++)
++		{
++			switch (tasks[i].state) {
++				case TASK_SLEEP:
++					tasks[i].remind_ticks--;
++					if (tasks[i].remind_ticks <= 0)
++					{
++						tasks[i].state = TASK_RUNNABLE;
++						tasks[i].remind_ticks = TIME_QUANT;
++					}
++					break;
++				case TASK_RUNNING:
++					tasks[i].remind_ticks--;
++					break;
++				default:
++					;
++			}
++		}
+ 
+ 		/* Lab4 TODO: Check cur_task->remind_ticks, if remind_ticks <= 0 then yield the task (call sched_yield() in sched.c)*/
++		if (cur_task->remind_ticks <= 0)
++		{
++			sched_yield();
++		}
+ 
+ 	}
+ }
+@@ -49,6 +71,8 @@
+ 	irq_setmask_8259A(irq_mask_8259A & ~(1<<IRQ_TIMER));
+ 
+ 	/* Lab3 TODO: Register trap handler */
++	extern void Timer_ISR();
++	register_handler(IRQ_OFFSET+IRQ_TIMER, timer_handler, Timer_ISR, 0, 0);
+ 
+ }
+ 
+Index: nctu_os/kernel/sched.c
+===================================================================
+--- nctu_os/kernel/sched.c	(revision 296)
++++ nctu_os/kernel/sched.c	(working copy)
+@@ -12,6 +12,35 @@
+ 	/* Lab4 TODO: Implement a simple round-robin scheduling there 
+ 	*  Hint: Choose a runnable task from tasks[] and use env_pop_tf() do the context-switch
+ 	*/
+-	
++	i = (cur_task->task_id + 1) % NR_TASKS;
++	for (; next_i < NR_TASKS; next_i++)
++	{
++		if (tasks[i].state == TASK_RUNNABLE)
++		{
++			if (cur_task->state == TASK_RUNNING)
++			{
++				cur_task->state = TASK_RUNNABLE;
++				cur_task->remind_ticks = TIME_QUANT;
++				cur_task = &tasks[i];
++				tasks[i].state = TASK_RUNNING;
++				break;
++			} else if (cur_task->state == TASK_SLEEP)
++			{
++				cur_task = &tasks[i];
++				tasks[i].state = TASK_RUNNING;
++				break;
++			} else if (cur_task->state == TASK_STOP) {
++				cur_task = &tasks[i];
++				tasks[i].state = TASK_RUNNING;
++				break;
++			}
++		} else if ( tasks[i].state == TASK_RUNNING)
++		{
++			cur_task = &tasks[i];
++			tasks[i].remind_ticks = TIME_QUANT;
++		}
++		i = (i + 1) % NR_TASKS;
++	}
+ 
++	env_pop_tf(&cur_task->tf);
+ }
