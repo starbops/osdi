@@ -1,0 +1,185 @@
+Index: nctu_os/kernel/trap.c
+===================================================================
+--- nctu_os/kernel/trap.c	(revision 360)
++++ nctu_os/kernel/trap.c	(working copy)
+@@ -3,6 +3,7 @@
+ #include <kernel/assert.h>
+ #include <inc/mmu.h>
+ #include <inc/x86.h>
++#include <inc/lock.h>
+ 
+ /* For debugging, so print_trapframe can distinguish between printing
+  * a saved trapframe and printing the current trapframe and print some
+@@ -143,31 +144,22 @@
+ 		return;
+ 	}
+ 
+-	last_tf = tf;
++	lock();	//(1)
+ 	/* Lab3 TODO: Check the trap number and call the interrupt handler. */
+ 	if (trap_hnd[tf->tf_trapno] != NULL)
+ 	{
++		extern Task *cur_task;
+ 	
+ 		if ((tf->tf_cs & 3) == 3)
+ 		{
+ 			// Trapped from user mode.
+-			extern Task *cur_task;
+-
+-			// Disable interrupt first
+-			// Think: Why we need disable interrupt here?
+-			__asm __volatile("cli");
+-
+-			// Copy trap frame (which is currently on the stack)
+-			// into 'cur_task->tf', so that running the environment
+-			// will restart at the trap point.
+ 			cur_task->tf = *tf;
+ 			tf = &(cur_task->tf);
+-				
+ 		}
+ 		// Do ISR
+ 		trap_hnd[tf->tf_trapno](tf);
+ 		
+-		// Pop the kernel stack 
++		//lock();	//(2)
+ 		env_pop_tf(tf);
+ 	}
+ 
+Index: nctu_os/kernel/trap_entry.S
+===================================================================
+--- nctu_os/kernel/trap_entry.S	(revision 369)
++++ nctu_os/kernel/trap_entry.S	(working copy)
+@@ -63,13 +63,13 @@
+ 	movw %ax, %es
+ 
+ 	# disable FL_IF in %eflags, i.e. disable interrupts
+-	pushfl
+-	popl %eax
+-	movl $FL_IF, %ebx
+-	notl %ebx
+-	andl %ebx, %eax
+-	pushl %eax
+-	popfl
++	#pushfl
++	#popl %eax
++	#movl $FL_IF, %ebx
++	#notl %ebx
++	#andl %ebx, %eax
++	#pushl %eax
++	#popfl
+ 
+ 	# Call default_trap_handler(tf), where tf=%esp
+ 	pushl %esp
+Index: nctu_os/kernel/task.h
+===================================================================
+--- nctu_os/kernel/task.h	(revision 360)
++++ nctu_os/kernel/task.h	(working copy)
+@@ -2,8 +2,8 @@
+ #define TASK_H
+ 
+ #include <inc/trap.h>
+-#define NR_TASKS	10
+-#define TIME_QUANT	100
++#define NR_TASKS	5
++#define TIME_QUANT	1
+ 
+ typedef enum
+ {
+Index: nctu_os/kernel/syscall.c
+===================================================================
+--- nctu_os/kernel/syscall.c	(revision 369)
++++ nctu_os/kernel/syscall.c	(working copy)
+@@ -1,6 +1,7 @@
+ #include <kernel/task.h>
+ #include <kernel/syscall.h>
+ #include <inc/trap.h>
++#include <inc/lock.h>
+ 
+ void do_puts(char *str, uint32_t len)
+ {
+@@ -144,7 +145,7 @@
+ 	/* Initial syscall trap after trap_init()*/
+ 	/* Lab4 TODO: Register system call's trap handler (syscall_handler)*/
+ 	extern void Syscall_ISR();
+-	register_handler(T_SYSCALL, syscall_handler, Syscall_ISR, 0, 3);
++	register_handler(T_SYSCALL, syscall_handler, Syscall_ISR, 1, 3);
+ 
+ }
+ 
+Index: nctu_os/kernel/main.c
+===================================================================
+--- nctu_os/kernel/main.c	(revision 360)
++++ nctu_os/kernel/main.c	(working copy)
+@@ -10,6 +10,20 @@
+ extern void init_video(void);
+ extern Task *cur_task;
+ 
++void task2()
++{
++	int i, pid;
++	i = getpid();
++	while(1)
++	{
++		if ( (pid=fork()) > 0 )
++		{
++			cprintf("Im %d, bye!\n", pid);
++			kill_self();
++		}
++	}
++}
++
+ void kernel_main(void)
+ {
+ 	extern void task_job();
+@@ -45,13 +59,8 @@
+ 	/* Below code is running on user mode */
+ 	if (fork())
+ 	{
+-
+ 		/* Child */
+-		if (fork()) task_job(); 
+-		else{
+-		if (fork()) task_job(); else
+-		if (fork()) task_job(); else task_job();}
+-		
++		task2();
+ 	}
+ 	else
+ 	{
+Index: nctu_os/kernel/sched.c
+===================================================================
+--- nctu_os/kernel/sched.c	(revision 369)
++++ nctu_os/kernel/sched.c	(working copy)
+@@ -36,11 +36,14 @@
+ 			}
+ 		} else if ( tasks[i].state == TASK_RUNNING)
+ 		{
+-			cur_task = &tasks[i];
++			//cur_task = &tasks[i];
+ 			tasks[i].remind_ticks = TIME_QUANT;
+ 		}
+ 		i = (i + 1) % NR_TASKS;
+ 	}
+ 
+-	env_pop_tf(&cur_task->tf);
++	if (next_i != NR_TASKS)
++	{
++		env_pop_tf(&cur_task->tf);
++	}
+ }
+Index: nctu_os/inc/lock.h
+===================================================================
+--- nctu_os/inc/lock.h	(revision 0)
++++ nctu_os/inc/lock.h	(revision 0)
+@@ -0,0 +1,11 @@
++#ifndef LOCK_H
++#define LOCK_H
++static inline void lock()
++{
++	__asm __volatile("cli");
++}
++static inline void unlock()
++{
++	__asm __volatile("sti");
++}
++#endif
