@@ -2,8 +2,8 @@
 #define TASK_H
 
 #include <inc/trap.h>
-#define NR_TASKS	10
-#define TIME_QUANT	100
+#define NR_TASKS	5
+#define TIME_QUANT	1
 
 typedef enum
 {

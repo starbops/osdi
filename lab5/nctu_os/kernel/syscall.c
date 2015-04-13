@@ -1,6 +1,7 @@
 #include <kernel/task.h>
 #include <kernel/syscall.h>
 #include <inc/trap.h>
+#include <inc/lock.h>
 
 void do_puts(char *str, uint32_t len)
 {
@@ -144,7 +145,7 @@ void syscall_init()
 	/* Initial syscall trap after trap_init()*/
 	/* Lab4 TODO: Register system call's trap handler (syscall_handler)*/
 	extern void Syscall_ISR();
-	register_handler(T_SYSCALL, syscall_handler, Syscall_ISR, 0, 3);
+	register_handler(T_SYSCALL, syscall_handler, Syscall_ISR, 1, 3);
 
 }
 

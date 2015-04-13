@@ -3,6 +3,7 @@
 #include <kernel/assert.h>
 #include <inc/mmu.h>
 #include <inc/x86.h>
+#include <inc/lock.h>
 
 /* For debugging, so print_trapframe can distinguish between printing
  * a saved trapframe and printing the current trapframe and print some
@@ -143,31 +144,22 @@ trap_dispatch(struct Trapframe *tf)
 		return;
 	}
 
-	last_tf = tf;
+	lock();	//(1)
 	/* Lab3 TODO: Check the trap number and call the interrupt handler. */
 	if (trap_hnd[tf->tf_trapno] != NULL)
 	{
+		extern Task *cur_task;
 	
 		if ((tf->tf_cs & 3) == 3)
 		{
 			// Trapped from user mode.
-			extern Task *cur_task;
-
-			// Disable interrupt first
-			// Think: Why we need disable interrupt here?
-			__asm __volatile("cli");
-
-			// Copy trap frame (which is currently on the stack)
-			// into 'cur_task->tf', so that running the environment
-			// will restart at the trap point.
 			cur_task->tf = *tf;
 			tf = &(cur_task->tf);
-				
 		}
 		// Do ISR
 		trap_hnd[tf->tf_trapno](tf);
 		
-		// Pop the kernel stack 
+		//lock();	//(2)
 		env_pop_tf(tf);
 	}
 

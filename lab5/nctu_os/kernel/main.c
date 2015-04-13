@@ -10,6 +10,20 @@
 extern void init_video(void);
 extern Task *cur_task;
 
+void task2()
+{
+	int i, pid;
+	i = getpid();
+	while(1)
+	{
+		if ( (pid=fork()) > 0 )
+		{
+			cprintf("Im %d, bye!\n", pid);
+			kill_self();
+		}
+	}
+}
+
 void kernel_main(void)
 {
 	extern void task_job();
@@ -45,13 +59,8 @@ void kernel_main(void)
 	/* Below code is running on user mode */
 	if (fork())
 	{
-
 		/* Child */
-		if (fork()) task_job(); 
-		else{
-		if (fork()) task_job(); else
-		if (fork()) task_job(); else task_job();}
-		
+		task2();
 	}
 	else
 	{

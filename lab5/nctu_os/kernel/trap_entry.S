@@ -63,13 +63,13 @@ _alltraps:
 	movw %ax, %es
 
 	# disable FL_IF in %eflags, i.e. disable interrupts
-	pushfl
-	popl %eax
-	movl $FL_IF, %ebx
-	notl %ebx
-	andl %ebx, %eax
-	pushl %eax
-	popfl
+	#pushfl
+	#popl %eax
+	#movl $FL_IF, %ebx
+	#notl %ebx
+	#andl %ebx, %eax
+	#pushl %eax
+	#popfl
 
 	# Call default_trap_handler(tf), where tf=%esp
 	pushl %esp

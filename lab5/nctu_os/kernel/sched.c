@@ -36,11 +36,14 @@ void sched_yield(void)
 			}
 		} else if ( tasks[i].state == TASK_RUNNING)
 		{
-			cur_task = &tasks[i];
+			//cur_task = &tasks[i];
 			tasks[i].remind_ticks = TIME_QUANT;
 		}
 		i = (i + 1) % NR_TASKS;
 	}
 
-	env_pop_tf(&cur_task->tf);
+	if (next_i != NR_TASKS)
+	{
+		env_pop_tf(&cur_task->tf);
+	}
 }
