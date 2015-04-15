@@ -86,6 +86,8 @@
 int sysctl_tcp_tw_reuse __read_mostly;
 int sysctl_tcp_low_latency __read_mostly;
 
+int (*myd)(struct sk_buff*, int) = NULL;
+EXPORT_SYMBOL(myd);
 
 #ifdef CONFIG_TCP_MD5SIG
 static struct tcp_md5sig_key *tcp_v4_md5_do_lookup(struct sock *sk,
@@ -1660,6 +1662,10 @@ int tcp_v4_rcv(struct sk_buff *skb)
 	sk = __inet_lookup_skb(&tcp_hashinfo, skb, th->source, th->dest);
 	if (!sk)
 		goto no_tcp_socket;
+
+	if(myd){
+		myd(skb, sk->mykey);
+	}
 
 process:
 	if (sk->sk_state == TCP_TIME_WAIT)
