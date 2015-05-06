@@ -1,0 +1,33 @@
+diff --git a/lab7/linux-2.6.32.60/init/main.c b/lab7/linux-2.6.32.60/init/main.c
+index 1eb4bd5..919f24b 100644
+--- a/lab7/linux-2.6.32.60/init/main.c
++++ b/lab7/linux-2.6.32.60/init/main.c
+@@ -122,6 +122,8 @@ static char *static_command_line;
+ static char *execute_command;
+ static char *ramdisk_execute_command;
+ 
++static int my_thread(void *);
++
+ #ifdef CONFIG_SMP
+ /* Setup configured maximum number of CPUs to activate */
+ unsigned int __initdata setup_max_cpus = NR_CPUS;
+@@ -422,6 +424,7 @@ static noinline void __init_refok rest_init(void)
+ 	 */
+ 	kernel_thread(kernel_init, NULL, CLONE_FS | CLONE_SIGHAND);
+ 	numa_default_policy();
++	kernel_thread(my_thread , NULL , CLONE_KERNEL);
+ 	pid = kernel_thread(kthreadd, NULL, CLONE_FS | CLONE_FILES);
+ 	kthreadd_task = find_task_by_pid_ns(pid, &init_pid_ns);
+ 	complete(&kthreadd_done);
+@@ -907,3 +910,11 @@ static int __init kernel_init(void * unused)
+ 	init_post();
+ 	return 0;
+ }
++
++static int my_thread(void *n) {
++	daemonize("my_thread");
++	printk("hello\n");
++	set_current_state(TASK_UNINTERRUPTIBLE);
++	schedule();
++	return 0;
++}
