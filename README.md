@@ -14,3 +14,5 @@ Labs in course of "Operating System Design and Implementation".
 
 ## Lab06
 
+## Lab07
+
