@@ -25,6 +25,8 @@
 #define PAGE_SECTORS_SHIFT	(PAGE_SHIFT - SECTOR_SHIFT)
 #define PAGE_SECTORS		(1 << PAGE_SECTORS_SHIFT)
 
+#define PAGE_ID_MASK		0x10000000
+
 /*
  * Each block ramdisk device has a radix_tree brd_pages of pages that stores
  * the pages containing the block device's contents. A brd page's ->index is
@@ -51,13 +53,18 @@ struct brd_device {
 	struct radix_tree_root	brd_pages;
 };
 
+static bool snapshot_state = false;
+static pgoff_t sp_idx_arr[1024] = {0};
+static unsigned int sp_count = 0;
+
 /*
  * Look up and return a brd's page for a given sector.
  */
-static struct page *brd_lookup_page(struct brd_device *brd, sector_t sector)
+static struct page *brd_lookup_page(struct brd_device *brd, sector_t sector,
+	bool is_read)
 {
-	pgoff_t idx;
-	struct page *page;
+	pgoff_t idx, shadow_idx;
+	struct page *page, *shadow_page;
 
 	/*
 	 * The page lifetime is protected by the fact that we have opened the
@@ -71,8 +78,32 @@ static struct page *brd_lookup_page(struct brd_device *brd, sector_t sector)
 	 * here, only deletes).
 	 */
 	rcu_read_lock();
+
+	/* get page */
 	idx = sector >> PAGE_SECTORS_SHIFT; /* sector to page index */
 	page = radix_tree_lookup(&brd->brd_pages, idx);
+
+	/* get shadow page */
+	shadow_idx = (idx | PAGE_ID_MASK);
+	shadow_page = radix_tree_lookup(&brd->brd_pages, shadow_idx);
+
+	/* check whether in snapshot state or not */
+	if (snapshot_state) {
+		if (is_read) {
+			/* read page */
+			if (shadow_page) {
+				/* from shadow page */
+				rcu_read_unlock();
+				return shadow_page;
+			}
+			/* from original */
+		} else {
+			/* write page */
+			rcu_read_unlock();
+			return shadow_page;
+		}
+	}
+
 	rcu_read_unlock();
 
 	BUG_ON(page && page->index != idx);
@@ -91,7 +122,7 @@ static struct page *brd_insert_page(struct brd_device *brd, sector_t sector)
 	struct page *page;
 	gfp_t gfp_flags;
 
-	page = brd_lookup_page(brd, sector);
+	page = brd_lookup_page(brd, sector, false);
 	if (page)
 		return page;
 
@@ -119,6 +150,12 @@ static struct page *brd_insert_page(struct brd_device *brd, sector_t sector)
 
 	spin_lock(&brd->brd_lock);
 	idx = sector >> PAGE_SECTORS_SHIFT;
+
+	if (snapshot_state) {
+		idx |= PAGE_ID_MASK;
+		sp_idx_arr[sp_count++] = idx;
+	}
+
 	if (radix_tree_insert(&brd->brd_pages, idx, page)) {
 		__free_page(page);
 		page = radix_tree_lookup(&brd->brd_pages, idx);
@@ -131,6 +168,31 @@ static struct page *brd_insert_page(struct brd_device *brd, sector_t sector)
 	radix_tree_preload_end();
 
 	return page;
+}
+
+/*
+ * Free all shadow pages on radix tree. This must only be called when rollback
+ * happens.
+ */
+static void brd_free_shadow_pages(struct brd_device *brd)
+{
+	int i;
+	struct page *page;
+
+	printk(KERN_INFO "Enter brd_free_shadow_pages, [sp_count]: %-5u\n",
+			sp_count);
+
+	for (i = 0; i < sp_count; i++) {
+		void *ret;
+
+		page = radix_tree_lookup(&brd->brd_pages, sp_idx_arr[i]);
+		BUG_ON(page->index < sp_idx_arr[i]);
+		ret = radix_tree_delete(&brd->brd_pages, sp_idx_arr[i]);
+		BUG_ON(!ret || ret !=page);
+		__free_page(page);
+	}
+
+	sp_count = 0;
 }
 
 /*
@@ -201,7 +263,7 @@ static void copy_to_brd(struct brd_device *brd, const void *src,
 	size_t copy;
 
 	copy = min_t(size_t, n, PAGE_SIZE - offset);
-	page = brd_lookup_page(brd, sector);
+	page = brd_lookup_page(brd, sector, false);
 	BUG_ON(!page);
 
 	dst = kmap_atomic(page, KM_USER1);
@@ -212,7 +274,7 @@ static void copy_to_brd(struct brd_device *brd, const void *src,
 		src += copy;
 		sector += copy >> SECTOR_SHIFT;
 		copy = n - copy;
-		page = brd_lookup_page(brd, sector);
+		page = brd_lookup_page(brd, sector, false);
 		BUG_ON(!page);
 
 		dst = kmap_atomic(page, KM_USER1);
@@ -233,7 +295,7 @@ static void copy_from_brd(void *dst, struct brd_device *brd,
 	size_t copy;
 
 	copy = min_t(size_t, n, PAGE_SIZE - offset);
-	page = brd_lookup_page(brd, sector);
+	page = brd_lookup_page(brd, sector, true);
 	if (page) {
 		src = kmap_atomic(page, KM_USER1);
 		memcpy(dst, src + offset, copy);
@@ -245,7 +307,7 @@ static void copy_from_brd(void *dst, struct brd_device *brd,
 		dst += copy;
 		sector += copy >> SECTOR_SHIFT;
 		copy = n - copy;
-		page = brd_lookup_page(brd, sector);
+		page = brd_lookup_page(brd, sector, true);
 		if (page) {
 			src = kmap_atomic(page, KM_USER1);
 			memcpy(dst, src, copy);
@@ -347,6 +409,23 @@ static int brd_ioctl(struct block_device *bdev, fmode_t mode,
 {
 	int error;
 	struct brd_device *brd = bdev->bd_disk->private_data;
+
+	/* handler of snapshot and rollback */
+	switch (arg) {
+		case 0: break;
+		case 1:		/* snapshot */
+			snapshot_state = true;
+			printk(KERN_INFO "BRD: snapshot start, flag = %d\n", snapshot_state);
+			break;
+		case 2:		/* rollback */
+			snapshot_state = false;
+			printk(KERN_INFO "BRD: rollback start, flag = %d\n", snapshot_state);
+			mutex_lock(&bdev->bd_mutex);
+			brd_free_shadow_pages(brd);
+			mutex_unlock(&bdev->bd_mutex);
+			break;
+		default: break;
+	}
 
 	if (cmd != BLKFLSBUF)
 		return -ENOTTY;
