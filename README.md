@@ -20,3 +20,7 @@ Labs in course of "Operating System Design and Implementation".
 
 ## Lab09 - CPU Load Imbalancer
 
+## Lab10 - Block-Device Drivers
+
+## Lab11 - I/O Scheduler
+
