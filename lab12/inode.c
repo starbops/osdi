@@ -36,12 +36,16 @@
 #include <linux/parser.h>
 #include <linux/magic.h>
 #include <asm/uaccess.h>
+#include <linux/proc_fs.h>
 #include "internal.h"
 
 #define RAMFS_DEFAULT_MODE	0755
+#define MAX_PROC_SIZE 100
 
 static const struct super_operations ramfs_ops;
 static const struct inode_operations ramfs_dir_inode_operations;
+static char proc_data[MAX_PROC_SIZE];
+bool ramfs_flag = false;
 
 static struct backing_dev_info ramfs_backing_dev_info = {
 	.name		= "ramfs",
@@ -291,13 +295,42 @@ static struct file_system_type rootfs_fs_type = {
 	.kill_sb	= kill_litter_super,
 };
 
+static int my_read(char *buf, char **start, off_t off, int count, int *eof,
+		void *data)
+{
+	int len = 0;
+	len = sprintf(buf, "%d\n", ramfs_flag);
+	printk(KERN_INFO "ramfs_flag = %d\n", ramfs_flag);
+
+	return len;
+}
+
+static int my_write(struct file *file, const char __user *buf,
+		unsigned long count, void *data)
+{
+	if(count > MAX_PROC_SIZE)
+		count = MAX_PROC_SIZE;
+	if(copy_from_user(proc_data, buf, count))
+		return -EFAULT;
+
+	ramfs_flag = proc_data[0] == '1';
+
+	return count;
+}
+
 static int __init init_ramfs_fs(void)
 {
+	struct proc_dir_entry *proc_entry;
+	proc_entry = create_proc_entry("flag", 0644, NULL);
+	proc_entry -> read_proc = my_read;
+	proc_entry -> write_proc = my_write;
+
 	return register_filesystem(&ramfs_fs_type);
 }
 
 static void __exit exit_ramfs_fs(void)
 {
+	remove_proc_entry("flag", NULL);
 	unregister_filesystem(&ramfs_fs_type);
 }
 
