@@ -1,0 +1,68 @@
+/dev/sdb1
+FAT-16
+
+# dd if=/dev/sdb1 bs=512 count=1
+
+==============================================================================
+00000000  eb 3c 90 6d 6b 64 6f 73  66 73 00 00 02 20 20 00  |.<.mkdosfs...  .|
+00000010  02 00 02 00 00 f8 00 01  3f 00 ff 00 00 00 00 00  |........?.......|
+00000020  00 f8 1f 00 00 00 29 07  99 97 b3 20 20 20 20 20  |......)....     |
+00000030  20 20 20 20 20 20 46 41  54 31 36 20 20 20 0e 1f  |      FAT16   ..|
+00000040  be 5b 7c ac 22 c0 74 0b  56 b4 0e bb 07 00 cd 10  |.[|.".t.V.......|
+00000050  5e eb f0 32 e4 cd 16 cd  19 eb fe 54 68 69 73 20  |^..2.......This |
+00000060  69 73 20 6e 6f 74 20 61  20 62 6f 6f 74 61 62 6c  |is not a bootabl|
+00000070  65 20 64 69 73 6b 2e 20  20 50 6c 65 61 73 65 20  |e disk.  Please |
+00000080  69 6e 73 65 72 74 20 61  20 62 6f 6f 74 61 62 6c  |insert a bootabl|
+00000090  65 20 66 6c 6f 70 70 79  20 61 6e 64 0d 0a 70 72  |e floppy and..pr|
+000000a0  65 73 73 20 61 6e 79 20  6b 65 79 20 74 6f 20 74  |ess any key to t|
+000000b0  72 79 20 61 67 61 69 6e  20 2e 2e 2e 20 0d 0a 00  |ry again ... ...|
+000000c0  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  |................|
+*
+000001f0  00 00 00 00 00 00 00 00  00 00 00 00 00 00 55 aa  |..............U.|
+00000200
+==============================================================================
+
+sector size: 512 (0x0200) bytes
+sectors per cluster: 32 (0x20)
+	=> cluster size: 16 kb (512 bytes * 32)
+
+reserved area size: 32 (0x0020) sectors
+
+sectors per FAT: 256 (0x0100)
+	=> FAT size: 128 kb (512 bytes * 256)
+
+start location of data area: reserved area + 2 FATs
+	=> 544th (32 + (256 * 2)) sector (starts with sector #0)
+
+size of root directory: 32 kb (not mentioned in boot sector...)
+
+start location of data area but non root directory:
+	reserved area + 2 FATs + root directory
+	=> 608th (544 + 64) sector (starts with sector #0)
+
+# data recovery
+
+- 2 FATs
+- root directory
+
+# file 
+
+MYHELLOW.TXT
+
+M = 4D = 0100 1101 -> 1010 0110 = A6
+Y = 59 + A6 = FF = 1111 1111 -> 1111 1111 = FF
+H = 48 + FF = 47 = 0100 0111 -> 1010 0011 = A3
+E = 45 + A3 = E8 = 1110 1000 -> 0111 0100 = 74
+L = 4C + 74 = C0 = 1100 0000 -> 0110 0000 = 60
+L = 4C + 60 = AC = 1010 1100 -> 0101 0110 = 56
+O = 4F + 56 = A5 = 1010 0101 -> 1101 0010 = D2
+W = 57 + D2 = 29 = 0010 1001 -> 1001 0100 = 94
+T = 54 + 94 = E8 = 1110 1000 -> 0111 0100 = 74
+X = 58 + 74 = CC = 1100 1100 -> 0110 0110 = 66
+T = 54 + 66 = BA
+
+
+4000
+24000
+44000
+4c000
